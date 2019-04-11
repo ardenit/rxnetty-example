@@ -5,7 +5,6 @@ import io.netty.buffer.ByteBuf
 import io.reactivex.netty.channel.Connection
 import io.reactivex.netty.protocol.tcp.client.TcpClient
 import io.reactivex.netty.util.StringLineDecoder
-import rx.schedulers.Schedulers
 import rx.subjects.PublishSubject
 
 class Client (

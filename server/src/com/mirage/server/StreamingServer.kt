@@ -33,12 +33,6 @@ class EventSubjectAdapter<T>(private val subj: EventSubject<T> = EventSubject.cr
 }
 
 
-fun <T> wrap() : rx.subjects.Subject<T, T> {
-    val wrapper = PublishSubject.create<T>()
-    return wrapper
-}
-
-
 class Player(private val connection: Connection<ByteBuf, ByteBuf>) {
 
     //TODO Действия при ошибке (обработка дисконнекта)
@@ -103,9 +97,7 @@ fun main() {
         val pl = Player(it)
         val tmp = pl.init()
 
-        val subs = Subscribers.create<String> {
-            println(it)
-        }
+        val subs = Subscribers.create<String>(::println)
 
 
         val t = Timer(4000) {
