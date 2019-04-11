@@ -2,45 +2,58 @@
 package com.mirage.server
 
 import io.netty.buffer.ByteBuf
-import io.netty.channel.*
-import io.netty.channel.socket.DuplexChannel
 import io.reactivex.netty.channel.Connection
 import io.reactivex.netty.protocol.tcp.server.TcpServer
 import io.reactivex.netty.util.StringLineDecoder
+import rx.Observable
 import rx.subjects.PublishSubject
-import java.net.SocketAddress
+import rx.subjects.UnicastSubject
+import java.util.*
 
 
-class Server(
-    private val onNewConnection: (Connection<ByteBuf, ByteBuf>) -> Unit = {println("new connection!")},
-    private val onNewClientMessage: (Connection<ByteBuf, ByteBuf>, String) -> Unit = {_, n -> println(n)},
-    private val onError: (Connection<ByteBuf, ByteBuf>, Throwable) -> Unit = {c, _ -> c.close()}
-) {
+class Player(private val connection: Connection<ByteBuf, ByteBuf>) {
 
-    private val server: TcpServer<ByteBuf, ByteBuf> = TcpServer.newServer(55555)
+    private var room: Room? = null
 
-    private val out = PublishSubject.create<String>()
+    private val inMsgs = UnicastSubject.create<String>()
+
+    private val outMsgs = PublishSubject.create<String>()
+
+    fun init() : Observable<Void> {
+        connection
+            .addChannelHandlerFirst<String, ByteBuf>("string-decoder", StringLineDecoder())
+            .input
+            .subscribe(
+                {inMsgs.onNext(it)},
+                {connection.close()},
+                {connection.close()}
+            )
+        return connection.writeStringAndFlushOnEach(outMsgs)
+    }
 
     /**
      * msg should end with '\n'
      */
     fun sendMessage(msg: String) {
-        out.onNext(msg)
+        outMsgs.onNext(msg)
     }
 
-    fun start() {
-        server.start {connection ->
-                onNewConnection(connection)
-                connection
-                    .addChannelHandlerFirst<String, ByteBuf>("string-decoder", StringLineDecoder())
-                    .input
-                    .subscribe(
-                        {onNewClientMessage(connection, it)},
-                        {onError(connection, it)},
-                        {println("onCompleted"); connection.close()}
-                    )
-                connection.writeStringAndFlushOnEach(out)
-            }
+    val observable: Observable<String>
+        get() = inMsgs
+
+}
+
+class Room {
+
+}
+
+
+class Server {
+
+    private val server: TcpServer<ByteBuf, ByteBuf> = TcpServer.newServer(55555)
+
+    fun start(onNewConnection: (Connection<ByteBuf, ByteBuf>) -> Observable<Void>) {
+        server.start(onNewConnection)
     }
 
     fun join() {
@@ -53,11 +66,26 @@ fun main() {
 
     val s = Server()
 
-    s.start()
+    val players = Collections.synchronizedList(ArrayList<Player>())
+
+    s.start {
+        val pl = Player(it)
+        val tmp = pl.init()
+
+        pl.observable.subscribe {
+            println(it)
+        }
+
+        players.add(pl)
+        tmp
+    }
 
     val t = Timer(1500) {
-        s.sendMessage(it.toString() + "\n")
+        for (p in players) {
+            p.sendMessage(it.toString() + "\n")
+        }
     }
+
     t.start()
 
     s.join()
