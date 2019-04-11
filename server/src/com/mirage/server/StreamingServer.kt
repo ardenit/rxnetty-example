@@ -5,17 +5,48 @@ import io.netty.buffer.ByteBuf
 import io.reactivex.netty.channel.Connection
 import io.reactivex.netty.protocol.tcp.server.TcpServer
 import io.reactivex.netty.util.StringLineDecoder
+import me.khol.reactive.subjects.EventSubject
 import rx.Observable
+import rx.Subscription
+import rx.observers.Subscribers
 import rx.subjects.PublishSubject
-import rx.subjects.UnicastSubject
-import java.util.*
+import java.util.Collections
+
+class EventSubjectAdapter<T>(private val subj: EventSubject<T> = EventSubject.create<T>()) : rx.subjects.Subject<T, T> ({
+
+    it.add(object : Subscription {
+        val subs = subj.subscribe(it::onNext, it::onError, it::onCompleted)
+
+        override fun isUnsubscribed(): Boolean = subs.isDisposed
+        override fun unsubscribe() = subs.dispose()
+    })
+
+}) {
+
+    override fun hasObservers(): Boolean = subj.hasObservers()
+
+    override fun onError(e: Throwable?) = subj.onError(e ?: Exception("WTF"))
+
+    override fun onCompleted() = subj.onComplete()
+
+    override fun onNext(t: T) = subj.onNext(t)
+}
+
+
+fun <T> wrap() : rx.subjects.Subject<T, T> {
+    val wrapper = PublishSubject.create<T>()
+    return wrapper
+}
 
 
 class Player(private val connection: Connection<ByteBuf, ByteBuf>) {
 
+    //TODO Действия при ошибке (обработка дисконнекта)
+    private val onError: (Connection<ByteBuf, ByteBuf>, Throwable) -> Unit = { c, _ -> c.close()}
+
     private var room: Room? = null
 
-    private val inMsgs = UnicastSubject.create<String>()
+    private val inMsgs = EventSubjectAdapter<String>()
 
     private val outMsgs = PublishSubject.create<String>()
 
@@ -25,7 +56,7 @@ class Player(private val connection: Connection<ByteBuf, ByteBuf>) {
             .input
             .subscribe(
                 {inMsgs.onNext(it)},
-                {connection.close()},
+                {onError(connection, it)},
                 {connection.close()}
             )
         return connection.writeStringAndFlushOnEach(outMsgs)
@@ -72,13 +103,26 @@ fun main() {
         val pl = Player(it)
         val tmp = pl.init()
 
-        pl.observable.subscribe {
+        val subs = Subscribers.create<String> {
             println(it)
         }
+
+
+        val t = Timer(4000) {
+            println("subscribe")
+            pl.observable.subscribe(subs)
+            subs.unsubscribe()
+        }
+        t.start()
+
+
+
+
 
         players.add(pl)
         tmp
     }
+
 
     val t = Timer(1500) {
         for (p in players) {

@@ -10,6 +10,7 @@ dependencies {
     implementation 'io.reactivex:rxnetty-tcp:0.5.3'
     implementation 'io.reactivex:rxnetty-examples:0.5.3'
     implementation 'io.reactivex:rxnetty-spectator-tcp:0.5.3'
+    implementation 'me.khol:eventsubject:1.0.0'
 }
 
 sourceCompatibility = 1.8

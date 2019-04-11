@@ -48,14 +48,16 @@ class Client (
 
 fun main() {
 
-    val c = Client()
+    for (i in 0 until 1) {
+        val c = Client()
 
-    c.start()
+        c.start()
 
-    val t = Timer(2000) {
-        c.sendMessage(it.toString() + "\n")
+        val t = Timer(1450) {
+            c.sendMessage("$i\n")
+        }
+
+        t.start()
     }
-
-    t.start()
 
 }
