@@ -35,11 +35,6 @@ class EventSubjectAdapter<T>(private val subj: EventSubject<T> = EventSubject.cr
 
 class Player(private val connection: Connection<ByteBuf, ByteBuf>) {
 
-    //TODO Действия при ошибке (обработка дисконнекта)
-    private val onError: (Connection<ByteBuf, ByteBuf>, Throwable) -> Unit = { c, _ -> c.close()}
-
-    private var room: Room? = null
-
     private val inMsgs = EventSubjectAdapter<String>()
 
     private val outMsgs = PublishSubject.create<String>()
@@ -50,7 +45,11 @@ class Player(private val connection: Connection<ByteBuf, ByteBuf>) {
             .input
             .subscribe(
                 {inMsgs.onNext(it)},
-                {onError(connection, it)},
+                { e ->
+                    println("Connection closed")
+                    connection.close()
+                    inMsgs.onError(e)
+                },
                 {connection.close()}
             )
         return connection.writeStringAndFlushOnEach(outMsgs)
@@ -97,19 +96,16 @@ fun main() {
         val pl = Player(it)
         val tmp = pl.init()
 
-        val subs = Subscribers.create<String>(::println)
-
-
-        val t = Timer(4000) {
+        var t : Timer? = null
+        val subs = Subscribers.create<String>(::println) {
+            t?.stop()
+        }
+        t = Timer(4000) {
             println("subscribe")
-            pl.observable.subscribe(subs)
+                pl.observable.subscribe(subs)
             subs.unsubscribe()
         }
         t.start()
-
-
-
-
 
         players.add(pl)
         tmp
